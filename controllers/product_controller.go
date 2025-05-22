@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/bobbypratama97/product-rest-api/models"
 	"github.com/bobbypratama97/product-rest-api/repositories"
@@ -9,18 +11,42 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
 func GetProducts(ctx *gin.Context) {
-	products, err := repositories.GetProducts()
+	sortParam := ctx.Query("sorting")
+	pageStr := ctx.DefaultQuery("page", "1")
+	limitStr := ctx.DefaultQuery("limit", "10")
+
+	// Convert to integers
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 10
+	}
+
+	products, total, err := repositories.GetProducts(sortParam,page,limit)
 	if err != nil {
 		ctx.JSON(500, gin.H{"error": "Failed to fetch products"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":   http.StatusOK,
-		"meta": gin.H{},
-		"message": "Successfully fetched products",
-		"data": products,
-	})
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+	response := models.ProductResponse{
+		Code: http.StatusOK,
+		Meta: models.MetaData{
+			Page:       page,
+			Limit:      limit,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+		Message: "Successfully fetched products",
+		Data:    products,
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 func InsertProduct(ctx *gin.Context) {
