@@ -43,7 +43,8 @@ Defines the structure of database models and handles things like custom JSON for
 `📂 /utilities`
 Contains utility/helper functions such as middlewares, validators, and other reusable tools. This design ensures maintainability, scalability, and testability all accross the project.
 
-## 🔗 API Documentation
+## 🔗 API Documentation (Sql File + Postman Collection)
+https://drive.google.com/drive/folders/1UgNtzDDsovV8v5wt65MOGPb6XG76Ps8s?usp=sharing
 
 ## 👨‍🚀 Author
 Built with 🫶 by Bobby Pratama.
