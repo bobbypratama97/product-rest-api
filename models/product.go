@@ -53,7 +53,7 @@ func (p Product) MarshalJSON() ([]byte, error) {
 //unmarshal JSON from redis to format the date
 func (p *Product) UnmarshalJSON(data []byte) error {
 	type Alias Product
-	aux := &struct {
+	formattedColumn := &struct {
 		CreatedAt string `json:"created_at"`
 		UpdatedAt string `json:"updated_at"`
 		*Alias
@@ -61,16 +61,16 @@ func (p *Product) UnmarshalJSON(data []byte) error {
 		Alias: (*Alias)(p),
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	if err := json.Unmarshal(data, &formattedColumn); err != nil {
 		return err
 	}
 
 	loc, _ := time.LoadLocation("Asia/Jakarta")
- createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", aux.CreatedAt, loc)
+ createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", formattedColumn.CreatedAt, loc)
 	if err != nil {
 			return err
 	}
-	updatedAt, err := time.ParseInLocation("2006-01-02 15:04:05", aux.UpdatedAt, loc)
+	updatedAt, err := time.ParseInLocation("2006-01-02 15:04:05", formattedColumn.UpdatedAt, loc)
 	if err != nil {
 			return err
 	}

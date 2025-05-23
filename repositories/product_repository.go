@@ -37,7 +37,7 @@ func InitDB() error {
 func GetProducts(sortParam string, page int, limit int) ([]models.Product, models.MetaData, error) {
 	key := "products:erajaya"
 
-	// Try fetching from Redis
+	//fetch data from redis first
 	cached, err := RedisClient.Get(Ctx, key).Result()
 	if err == nil {
 		var cachedProducts []models.Product
