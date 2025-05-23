@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: password
+      DB_DATABASE_NAME: erajaya
+      REDIS_HOST: redis:6379
+      REDIS_DB: 0
+    depends_on:
+      - redis
+      - mysql
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  mysql:
+    image: mysql:8
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: erajaya
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: password
+    depends_on:
+      - mysql
+
+volumes:
+  mysql-data:

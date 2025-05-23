@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"math"
 	"net/http"
 	"strconv"
 
@@ -12,12 +11,12 @@ import (
 )
 
 
+
 func GetProducts(ctx *gin.Context) {
 	sortParam := ctx.Query("sorting")
 	pageStr := ctx.DefaultQuery("page", "1")
 	limitStr := ctx.DefaultQuery("limit", "10")
 
-	// Convert to integers
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
 		page = 1
@@ -27,26 +26,19 @@ func GetProducts(ctx *gin.Context) {
 		limit = 10
 	}
 
-	products, total, err := repositories.GetProducts(sortParam,page,limit)
+	products, metaData, err := repositories.GetProducts(sortParam,page,limit)
 	if err != nil {
 		ctx.JSON(500, gin.H{"error": "Failed to fetch products"})
 		return
 	}
-
-	totalPages := int(math.Ceil(float64(total) / float64(limit)))
-	response := models.ProductResponse{
+	resp := models.ProductResponse{
 		Code: http.StatusOK,
-		Meta: models.MetaData{
-			Page:       page,
-			Limit:      limit,
-			Total:      total,
-			TotalPages: totalPages,
-		},
+		Meta: metaData,
 		Message: "Successfully fetched products",
 		Data:    products,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 func InsertProduct(ctx *gin.Context) {

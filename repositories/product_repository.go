@@ -1,14 +1,19 @@
 package repositories
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/bobbypratama97/product-rest-api/models"
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var DB *gorm.DB
@@ -29,53 +34,87 @@ func InitDB() error {
 	return nil
 }
 
-func GetProducts(sortParam string,page int, limit int) ([]models.Product, int64, error) {
-	var products []models.Product
-	var total int64
-	query := DB.Model(&models.Product{})
+func GetProducts(sortParam string, page int, limit int) ([]models.Product, models.MetaData, error) {
+	key := "products:erajaya"
 
-	sortFields := strings.Split(sortParam, ",")
-	appliedSorts := make(map[string]bool)
-
-	//list of valid sorting options
-	sortOptions := map[string]struct {
-		Column string
-		Order  string
-	}{
-		"price_asc":  {"price", "ASC"},
-		"price_desc": {"price", "DESC"},
-		"name_asc":   {"name", "ASC"},
-		"name_desc":  {"name", "DESC"},
-	}
-
-	//iterate through sorting options
-	for _, field := range sortFields {
-		field = strings.TrimSpace(field) //remove any unwanted empty space
-		if opt, ok := sortOptions[field]; ok {
-			// we can only have one sort option per column, so we can't sort same column with 2 different options
-			if appliedSorts[opt.Column] {
-				continue
+	// Try fetching from Redis
+	cached, err := RedisClient.Get(Ctx, key).Result()
+	if err == nil {
+		var cachedProducts []models.Product
+		if err := json.Unmarshal([]byte(cached), &cachedProducts); err == nil {
+			paginated := sortAndPaginate(cachedProducts, sortParam, page, limit)
+			meta := models.MetaData{
+				Page:  page,
+				Limit: limit,
+				Total: int64(len(cachedProducts)),
+				TotalPages: int(math.Ceil(float64(len(cachedProducts)) / float64(limit))),
+				Cache: true,
 			}
-			//applied the sorting
-			query = query.Order(fmt.Sprintf("%s %s", opt.Column, opt.Order))
-			//temp variable to marks that the sorting on that column has been applied
-			appliedSorts[opt.Column] = true
+			return paginated, meta , nil
 		}
 	}
 
-	if len(appliedSorts) == 0 {
-		query = query.Order("created_at DESC")
+	// if redis cache is empty, fetch from DB
+	var products []models.Product
+	if err := DB.Order("created_at DESC").Find(&products).Error; err != nil {
+		return nil, models.MetaData{}, err
 	}
 
-	query.Count(&total)
+	// insert data to redis using simple goroutine to avoid blocking the main process
+	go func(p []models.Product) {
+		if data, err := json.Marshal(p); err == nil {
+			RedisClient.Set(Ctx, key, data, 15*time.Minute)
+		}
+	}(products)
+
+	paginated := sortAndPaginate(products, sortParam, page, limit)
+	meta := models.MetaData{
+		Page:  page,
+		Limit: limit,
+		Total: int64(len(products)),
+		TotalPages: int(math.Ceil(float64(len(products)) / float64(limit))),
+		Cache: false,
+	}
+	return paginated, meta, nil
+}
+
+//sorting and pagination process
+func sortAndPaginate(products []models.Product, sortParam string, page int, limit int) []models.Product {
+	sortFields := strings.Split(sortParam, ",")
+
+	for _, field := range sortFields {
+		field = strings.TrimSpace(field)
+		switch field {
+			case "price_asc":
+				sort.Slice(products, func(i, j int) bool {
+					return products[i].Price < products[j].Price
+				})
+			case "price_desc":
+				sort.Slice(products, func(i, j int) bool {
+					return products[i].Price > products[j].Price
+				})
+			case "name_asc":
+				sort.Slice(products, func(i, j int) bool {
+					return products[i].Name < products[j].Name
+				})
+			case "name_desc":
+				sort.Slice(products, func(i, j int) bool {
+					return products[i].Name > products[j].Name
+				})
+			}
+	}
 
 	// Pagination
-	offset := (page - 1) * limit
-	err := query.Offset(offset).Limit(limit).Find(&products).Error
-	if err != nil {
-		return nil, 0, err
+	start := (page - 1) * limit
+	if start > len(products) {
+		start = len(products)
 	}
-	return products, total,nil
+	end := start + limit
+	if end > len(products) {
+		end = len(products)
+	}
+
+	return products[start:end]
 }
 
 func InsertProduct(name string, price float64, quantity int, description string) error {
@@ -85,8 +124,25 @@ func InsertProduct(name string, price float64, quantity int, description string)
 		Quantity:    quantity,
 		Description: description,
 	}
-	if err := DB.Create(&product).Error; err != nil {
+	// upsert by product name, update the data if the product name already exists
+	if err := DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		UpdateAll: true,
+	}).Create(&product).Error; err != nil {
 		return err
 	}
+
+	// Clear Redis cache
+	cacheKey := "products:erajaya"
+	RedisClient.Del(Ctx, cacheKey)
+
+	// Refresh the cache with updated data
+	var products []models.Product
+	if err := DB.Order("created_at DESC").Find(&products).Error; err == nil {
+		if data, err := json.Marshal(products); err == nil {
+			RedisClient.Set(Ctx, cacheKey, data, 15*time.Minute)
+		}
+	}
+
 	return nil
 }

@@ -11,8 +11,8 @@ type Product struct {
 	Price       float64   `json:"price"`
 	Description string    `json:"description"`
 	Quantity    int       `json:"quantity"`
-	CreatedAt   time.Time `json:"-"`
-	UpdatedAt   time.Time `json:"-"`
+	CreatedAt   time.Time `json:"-" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `json:"-" gorm:"column:updated_at;autoUpdateTime"`
 }
 
 
@@ -27,6 +27,7 @@ type ProductRequest struct {
 func (p Product) MarshalJSON() ([]byte, error) {
 	type productAlias Product
 	alias := productAlias(p)
+	loc, _ := time.LoadLocation("Asia/Jakarta")
 
 	ordered := struct {
 		ID          uint    `json:"id"`
@@ -42,13 +43,42 @@ func (p Product) MarshalJSON() ([]byte, error) {
 		Price:       alias.Price,
 		Description: alias.Description,
 		Quantity:    alias.Quantity,
-		CreatedAt:   alias.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:   alias.UpdatedAt.Format("2006-01-02 15:04:05"),
+		CreatedAt:   alias.CreatedAt.In(loc).Format("2006-01-02 15:04:05"),
+		UpdatedAt:   alias.UpdatedAt.In(loc).Format("2006-01-02 15:04:05"),
 	}
 
 	return json.Marshal(ordered)
 }
 
+//unmarshal JSON from redis to format the date
+func (p *Product) UnmarshalJSON(data []byte) error {
+	type Alias Product
+	aux := &struct {
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+		*Alias
+	}{
+		Alias: (*Alias)(p),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+ createdAt, err := time.ParseInLocation("2006-01-02 15:04:05", aux.CreatedAt, loc)
+	if err != nil {
+			return err
+	}
+	updatedAt, err := time.ParseInLocation("2006-01-02 15:04:05", aux.UpdatedAt, loc)
+	if err != nil {
+			return err
+	}
+	p.CreatedAt = createdAt.UTC()
+	p.UpdatedAt = updatedAt.UTC()
+
+	return nil
+}
 
 type ProductResponse struct {
 	Code    int         `json:"code"`
@@ -62,4 +92,5 @@ type MetaData struct {
 	Limit      int `json:"limit"`
 	Total      int64 `json:"total"`
 	TotalPages int `json:"total_pages"`
+	Cache      bool `json:"cache"`
 }

@@ -17,6 +17,11 @@ func main() {
 	if err != nil {
 			log.Fatalf("Failed to connect to DB: %v", err)
 	}
+	// init Redis connection
+	err = repositories.InitRedis()
+	if err != nil {
+			log.Fatalf("Failed to connect to Redis: %v", err)
+	}
 	// init server
 	server := gin.Default()
 
