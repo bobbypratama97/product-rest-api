@@ -104,7 +104,7 @@ func sortAndPaginate(products []models.Product, sortParam string, page int, limi
 			}
 	}
 
-	// Pagination
+	// pagination
 	start := (page - 1) * limit
 	if start > len(products) {
 		start = len(products)
@@ -132,11 +132,11 @@ func InsertProduct(name string, price float64, quantity int, description string)
 		return err
 	}
 
-	// Clear Redis cache
+	// clear redis cache
 	cacheKey := "products:erajaya"
 	RedisClient.Del(Ctx, cacheKey)
 
-	// Refresh the cache with updated data
+	// refresh cache with updated data
 	var products []models.Product
 	if err := DB.Order("created_at DESC").Find(&products).Error; err == nil {
 		if data, err := json.Marshal(products); err == nil {
